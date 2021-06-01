@@ -29,6 +29,13 @@ type options struct {
 	async              bool
 	forceStopAsyncSend bool
 	skip               int
+	marshalAsJson      bool
+}
+
+func MarshalAsJson(enable bool) Option {
+	return func(opts *options) {
+		opts.marshalAsJson = enable
+	}
 }
 
 // Timeout with config Timeout.
@@ -123,6 +130,7 @@ func NewLogger(addr string, opts ...Option) (*Logger, error) {
 		TagPrefix:          options.tagPrefix,
 		Async:              options.async,
 		ForceStopAsyncSend: options.forceStopAsyncSend,
+		MarshalAsJSON:      options.marshalAsJson,
 	}
 	switch u.Scheme {
 	case "tcp":
@@ -183,6 +191,29 @@ func (l *Logger) Print(kvpair ...interface{}) {
 	if err := l.log.Post(data["module"], data); err != nil {
 		println(err)
 	}
+}
+
+// Print print the kv pairs log.
+func (l *Logger) Log(level log.Level, keyvals ...interface{}) error {
+	if len(keyvals) == 0 {
+		return fmt.Errorf("keyvals length is zero")
+	}
+	if len(keyvals)%2 != 0 {
+		keyvals = append(keyvals, "")
+	}
+
+	data := make(map[string]string, len(keyvals)/2+1)
+	if _, file, line, ok := runtime.Caller(l.opts.skip); ok {
+		data[l.stackTrace(file)] = strconv.Itoa(line)
+	}
+	for i := 0; i < len(keyvals); i += 2 {
+		data[fmt.Sprint(keyvals[i])] = fmt.Sprint(keyvals[i+1])
+	}
+
+	if err := l.log.Post(data["module"], data); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Close close the logger.
